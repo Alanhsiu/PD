@@ -138,6 +138,7 @@ void Partitioner::insertCell(Cell* cell, int part) {
             firstNode = firstNode->getNext();
         firstNode->setNext(curNode);
         curNode->setPrev(firstNode);
+    }
 }
 
 void Partitioner::printSummary() const {
