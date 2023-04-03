@@ -35,6 +35,7 @@ public:
     void partition();
 
     void init();
+    void insertCell(Cell* cell, int part);
 
     // member functions about reporting
     void printSummary() const;

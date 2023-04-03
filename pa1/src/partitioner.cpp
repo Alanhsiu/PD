@@ -120,6 +120,24 @@ void Partitioner::init() {
                 cell->decGain();
         }
     }
+    // init _bList
+    for (int i = 0; i < cellSize; ++i)
+        insertCell(_cellArray[i], _cellArray[i]->getPart());
+}
+
+void Partitioner::insertCell(Cell* cell, int part) {
+    Node* curNode = cell->getNode();
+    int gain = cell->getGain();
+    auto iter = _bList[part].find(gain);
+    if (iter == _bList[part].end()) {  // if the gain is not in the map
+        _bList[part][gain] = curNode;
+    } else if (iter != _bList[part].end()) {  // if the gain is in the map
+        // insert the cell to the end of the list
+        Node* firstNode = iter->second;
+        while (firstNode->getNext() != NULL)
+            firstNode = firstNode->getNext();
+        firstNode->setNext(curNode);
+        curNode->setPrev(firstNode);
 }
 
 void Partitioner::printSummary() const {
