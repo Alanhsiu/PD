@@ -64,6 +64,7 @@ public:
     void decGain()      { --_gain; }
     void incPinNum()    { ++_pinNum; }
     void decPinNum()    { --_pinNum; }
+    void changeGain(int gain) { _gain += gain; } // for convenience
     void addNet(const int netId) { _netList.push_back(netId); }
 
 private:

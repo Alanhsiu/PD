@@ -11,6 +11,7 @@ public:
     Net(string& name) :
         _name(name) {
         _partCount[0] = 0; _partCount[1] = 0;
+        _lock = false;
     }
     ~Net()  { }
 
@@ -18,10 +19,12 @@ public:
     string getName()           const { return _name; }
     int getPartCount(int part) const { return _partCount[part]; }
     vector<int> getCellList()  const { return _cellList; }
+    bool getLock()             const { return _lock; }
 
     // set functions
     void setName(const string name) { _name = name; }
     void setPartCount(int part, const int count) { _partCount[part] = count; }
+    void lock() { _lock = true; }
 
     // modify methods
     void incPartCount(int part)     { ++_partCount[part]; }
@@ -32,6 +35,7 @@ private:
     int             _partCount[2];  // Cell number in partition A(0) and B(1)
     string          _name;          // Name of the net
     vector<int>     _cellList;      // List of cells the net is connected to
+    bool            _lock;          // The net has locked cells ant both sides
 };
 
 #endif  // NET_H

@@ -33,6 +33,7 @@ int main(int argc, char** argv)
     partitioner->writeResult(output);
 
     // partitioner->reportCell();
+    // partitioner->reportBList();
     // partitioner->reportNet();
 
     return 0;
