@@ -62,16 +62,18 @@ void Partitioner::parseInput(fstream& inFile) {
 
 void Partitioner::partition() {
     init();
+    reportBList();
     cout << "=================init done=================" << endl;
     while (findMaxGainNode()) {  // move until no cell can be moved
-        cout << "=================loop start=================" << endl;
-        cout << "max gain cell is " << _cellArray[_maxGainNode->getId()]->getName() << endl;
+        cout << "=================loop " << _moveNum << " =================" << endl;
+        cout << "Max gain cell is " << _cellArray[_maxGainNode->getId()]->getName() << endl;
         move();
         reportBList();
         cout << "cutsize = " << _cutSize << endl;
     }
     cout << "=================partition done=================" << endl;
     findBest();
+    clear();
 }
 
 void Partitioner::init() {
@@ -132,7 +134,7 @@ void Partitioner::init() {
     // init _bList
     for (int i = 0; i < cellSize; ++i)
         insertNode(_cellArray[i]->getNode(), _cellArray[i]->getPart());
-    reportBList();
+    // reportBList();
 }
 
 bool Partitioner::findMaxGainNode() {
@@ -161,10 +163,9 @@ void Partitioner::move() {
     moveCell->move();
     moveCell->lock();
     removeNode(_maxGainNode, F);
-    --_partSize[F];
-    ++_partSize[T];
-    cout << "partSize[0] = " << _partSize[0] << ", partSize[1] = " << _partSize[1] << endl;
     ++_moveNum;
+    ++_partSize[T];
+    --_partSize[F];
     _moveStack.push_back(_maxGainNode->getId());
     _accGain += moveCell->getGain();
     if (_accGain > _maxAccGain) {
@@ -175,14 +176,12 @@ void Partitioner::move() {
 
     // update gain
     vector<int> netList = moveCell->getNetList();
-    for (auto netId : netList)
-        cout << _netArray[netId]->getName() << " ";
     cout << endl;
     for (auto netId : netList) {
         Net* net = _netArray[netId];
         net->incPartCount(T);
         net->decPartCount(F);
-        cout << "net " << net->getName() << " F = " << net->getPartCount(F) << " T = " << net->getPartCount(T) << endl;
+        cout << "* net " << net->getName() << " F = " << net->getPartCount(F) << " T = " << net->getPartCount(T) << endl;
         if (net->getLock())
             continue;
         int afterF = net->getPartCount(F);
@@ -193,10 +192,10 @@ void Partitioner::move() {
 
         for (auto cellId : cellList) {
             Cell* cell = _cellArray[cellId];
-            cout << "deal with cell " << cell->getName() << endl;
-            int gainChange = 0;
             if (cell->getLock())
                 continue;
+            cout << "Deal with cell " << cell->getName() << endl;
+            int gainChange = 0;
             int cellPart = cell->getPart();
             if (cellPart == F) {
                 if (afterT == 1)
@@ -213,16 +212,14 @@ void Partitioner::move() {
                 removeNode(cell->getNode(), cellPart);
                 cell->changeGain(gainChange);
                 insertNode(cell->getNode(), cellPart);
-                reportBList();
             }
-            // int temp = 0;
-            // cin >> temp;
         }
     }
 }
 
 void Partitioner::insertNode(Node* curNode, int part) {
     Cell* cell = _cellArray[curNode->getId()];
+    cout << "----insert cell " << cell->getName() << " to   part " << part << " with the gain " << cell->getGain() << endl;
     int gain = cell->getGain();
     auto iter = _bList[part].find(gain);
     if (iter == _bList[part].end()) {  // if the gain is not in the map
@@ -235,7 +232,6 @@ void Partitioner::insertNode(Node* curNode, int part) {
         firstNode->setNext(curNode);
         curNode->setPrev(firstNode);
     }
-    cout << "insert cell " << cell->getName() << " to part " << part << endl;
 }
 
 void Partitioner::removeNode(Node* curNode, int part) {
@@ -258,8 +254,10 @@ void Partitioner::removeNode(Node* curNode, int part) {
         Node* nextNode = curNode->getNext();
         prevNode->setNext(nextNode);
         nextNode->setPrev(prevNode);
+        curNode->setPrev(NULL);
+        curNode->setNext(NULL);
     }
-    cout << "remove cell " << cell->getName() << " from part " << part << endl;
+    cout << "----remove cell " << cell->getName() << " from part " << part << " with the gain " << cell->getGain() << endl;
 }
 
 void Partitioner::findBest() {
@@ -268,14 +266,13 @@ void Partitioner::findBest() {
         ++_partSize[!backCell->getPart()];
         --_partSize[backCell->getPart()];
         backCell->move();
-    }
-    reportCell();
 
+    }
     _cutSize -= _maxAccGain;
 }
 
 void Partitioner::reportBList() const {
-    cout << "==================== BList ====================" << endl;
+    cout << "==================== BList " << _moveNum << " ====================" << endl;
     for (int i = 0; i < 2; ++i) {
         cout << "Partition " << i << endl;
         for (auto iter = _bList[i].rbegin(); iter != _bList[i].rend(); ++iter) {

@@ -31,6 +31,7 @@ int main(int argc, char** argv)
     partitioner->partition();
     partitioner->printSummary();
     partitioner->writeResult(output);
+    cout << (double)clock() / CLOCKS_PER_SEC << "s" << endl;
 
     // partitioner->reportCell();
     // partitioner->reportBList();
