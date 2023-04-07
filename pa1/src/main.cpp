@@ -1,11 +1,12 @@
-#include <iostream>
+#include <ctime>
 #include <fstream>
+#include <iostream>
 #include <vector>
 #include "partitioner.h"
 using namespace std;
 
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv) {
+    clock_t start_ticks = clock();
     fstream input, output;
 
     if (argc == 3) {
@@ -21,21 +22,19 @@ int main(int argc, char** argv)
                  << "\". The program will be terminated..." << endl;
             exit(1);
         }
-    }
-    else {
+    } else {
         cerr << "Usage: ./fm <input file> <output file>" << endl;
         exit(1);
     }
-
     Partitioner* partitioner = new Partitioner(input);
     partitioner->partition();
     partitioner->printSummary();
     partitioner->writeResult(output);
-    cout << (double)clock() / CLOCKS_PER_SEC << "s" << endl;
+    partitioner->~Partitioner();
 
-    // partitioner->reportCell();
-    // partitioner->reportBList();
-    // partitioner->reportNet();
+    clock_t end_ticks = clock();
+    double total_time = (double)(end_ticks - start_ticks) / CLOCKS_PER_SEC;
+    std::cout << "Total run time: " << total_time << " seconds" << std::endl;
 
     return 0;
 }

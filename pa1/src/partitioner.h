@@ -12,7 +12,7 @@ class Partitioner {
    public:
     // constructor and destructor
     Partitioner(fstream& inFile)
-        : _cutSize(0), _netNum(0), _cellNum(0), _maxPinNum(0), _bFactor(0), _accGain(0), _maxAccGain(0), _iterNum(0) {
+        : _cutSize(0), _netNum(0), _cellNum(0), _maxPinNum(0), _earlyStopCount(0), _bFactor(0), _accGain(0), _maxAccGain(0), _iterNum(0) {
         parseInput(inFile);
         _partSize[0] = 0;
         _partSize[1] = 0;
@@ -32,7 +32,11 @@ class Partitioner {
     void parseInput(fstream& inFile);
     void partition();
 
-    void init();
+    void initPart();
+    void initGain();
+    void initBList();
+    void ResetCell();
+    void clearBList();
     bool findMaxGainNode();
     void move();
     void findBest();
@@ -48,6 +52,7 @@ class Partitioner {
 
    private:
     int _cutSize;                   // cut size
+    int _initCutSize;               // initial cut size
     int _partSize[2];               // size (cell number) of partition A(0) and B(1)
     int _netNum;                    // number of nets
     int _cellNum;                   // number of cells
@@ -55,6 +60,8 @@ class Partitioner {
     int _minCellNum;                // Cmin for building bucket list
     int _maxPinNum;                 // Pmax for building bucket list
     int _movePart;                  // the from side of the cell to be moved
+    int _earlyStopFlag;             // flag for early stop
+    int _earlyStopCount;            // count the number of early stop
     double _bFactor;                // the balance factor to be met
     Node* _maxGainNode;             // pointer to the node with max gain
     vector<Net*> _netArray;         // net array of the circuit
