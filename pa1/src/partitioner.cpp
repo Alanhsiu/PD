@@ -5,6 +5,8 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <random>
+#include <algorithm>
 #include <sstream>
 #include <vector>
 #include "cell.h"
@@ -61,14 +63,26 @@ void Partitioner::parseInput(fstream& inFile) {
 }
 
 void Partitioner::partition() {
-    _earlyStopFlag = 3;  // set early stop flag
+    _loopNum = 5;
+    _randomPartNum = 1000;
+    _earlyStopFlag = 3;
+
     initPart();
+    for (int i = 0; i < _loopNum; ++i) {
+        loop();
+        reset();
+    }
+    loop();
+}
+void Partitioner::loop() {
     initGain();
     initBList();
     while (findMaxGainNode())
         move();
     findBest();
+}
 
+void Partitioner::reset() {
     _initCutSize = _cutSize;
     _accGain = 0;
     _maxAccGain = 0;
@@ -78,52 +92,106 @@ void Partitioner::partition() {
     _earlyStopCount = 0;
     ResetCell();
     clearBList();
-    initGain();
-    initBList();
-
-    while (findMaxGainNode()) {
-        move();
-    }
-    findBest();
 }
 
+void Partitioner::randomPart() {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::shuffle(_randomCellArray.begin(), _randomCellArray.end(), gen);
+}
 void Partitioner::initPart() {
-    int halfCellNum = _cellNum / 2;
     _minCellNum = ceil(_cellNum * (1 - _bFactor) / 2);
     _maxCellNum = floor(_cellNum * (1 + _bFactor) / 2);
     _maxPinNum = 0;
 
+    // init partSize
+    int halfCellNum = _cellNum / 2;
+    _partSize[0] = halfCellNum;
+    _partSize[1] = _cellNum - halfCellNum;
+    for (int i = 0; i < _cellNum; ++i)
+        if (_cellArray[i]->getPinNum() > _maxPinNum)
+            _maxPinNum = _cellArray[i]->getPinNum();
+
+    // for (int i = 0; i < _cellNum; ++i) {
+    //     Cell* cell = _cellArray[i];
+    //     if (i < halfCellNum) {
+    //         cell->setPart(0);
+    //         vector<int> netList = cell->getNetList();
+    //         for (auto netId : netList) {
+    //             _netArray[netId]->incPartCount(0);
+    //         }
+    //     } else {
+    //         cell->setPart(1);
+    //         vector<int> netList = cell->getNetList();
+    //         for (auto netId : netList) {
+    //             _netArray[netId]->incPartCount(1);
+    //         }
+    //     }
+    // }
+    // for (int i = 0; i < _netNum; ++i)
+    //     if (_netArray[i]->getPartCount(0) && _netArray[i]->getPartCount(1))
+    //         ++_cutSize;
+    _initCutSize = 2400;
+    cout << "initCutSize: " << _initCutSize << endl;
+
+    // init randomCellArray
+    for (int i = 0; i < _cellNum; ++i)
+        _randomCellArray.push_back(new Cell(*_cellArray[i]));
     // init cell part and net info
+    for (int i = 0; i < _randomPartNum; i++) {
+        _cutSize = 0;
+        for (int i = 0; i < _netNum; i++) {
+            _netArray[i]->setPartCount(0, 0);
+            _netArray[i]->setPartCount(1, 0);
+        }
+        randomPart();
+        for (int i = 0; i < _cellNum; ++i) {
+            Cell* cell = _randomCellArray[i];
+            if (i < halfCellNum) {
+                cell->setPart(0);
+                vector<int> netList = cell->getNetList();
+                for (auto netId : netList) {
+                    _netArray[netId]->incPartCount(0);
+                }
+            } else {
+                cell->setPart(1);
+                vector<int> netList = cell->getNetList();
+                for (auto netId : netList) {
+                    _netArray[netId]->incPartCount(1);
+                }
+            }
+        }
+        for (int i = 0; i < _netNum; ++i)
+            if (_netArray[i]->getPartCount(0) && _netArray[i]->getPartCount(1))
+                ++_cutSize;
+        if (_cutSize < _initCutSize) {
+            _initCutSize = _cutSize;
+            cout << "newCutSize: " << _initCutSize << endl;
+            for (int i = 0; i < _cellNum; i++)
+                _cellArray[i] = _randomCellArray[i];
+        }
+    }
+    // _cutSize = _initCutSize;
     for (int i = 0; i < _cellNum; ++i) {
         Cell* cell = _cellArray[i];
-        if (i < halfCellNum) {  // put half of the cells in part A
+        if (i < halfCellNum) {
             cell->setPart(0);
-            // update net info
             vector<int> netList = cell->getNetList();
             for (auto netId : netList) {
                 _netArray[netId]->incPartCount(0);
             }
-        } else {  // put the other half of the cells in part B
+        } else {
             cell->setPart(1);
-            // update net info
             vector<int> netList = cell->getNetList();
             for (auto netId : netList) {
                 _netArray[netId]->incPartCount(1);
             }
         }
-        if (cell->getPinNum() > _maxPinNum)
-            _maxPinNum = cell->getPinNum();
     }
-    // init partSize
-    _partSize[0] = halfCellNum;
-    _partSize[1] = _cellNum - halfCellNum;
-
     for (int i = 0; i < _netNum; ++i)
         if (_netArray[i]->getPartCount(0) && _netArray[i]->getPartCount(1))
             ++_cutSize;
-    // for (int i = 0; i < _cellNum; i++)
-    //     _cellArray[i]->unlock();
-    _initCutSize = _cutSize;
+    cout << "cutSize: " << _cutSize << endl;
 }
 
 void Partitioner::initGain() {
@@ -256,7 +324,6 @@ void Partitioner::insertNode(Node* curNode, int part) {
     Cell* cell = _cellArray[curNode->getId()];
     int gain = cell->getGain();
     auto iter = _bList[part].find(gain);
-    cout << "insert cell " << cell->getName() << " gain = " << gain << endl;
     if (iter == _bList[part].end()) {  // if the gain is not in the map
         _bList[part][gain] = curNode;
     } else if (iter != _bList[part].end()) {  // if the gain is in the map
@@ -267,7 +334,6 @@ void Partitioner::insertNode(Node* curNode, int part) {
         firstNode->setNext(curNode);
         curNode->setPrev(firstNode);
     }
-    cout << "insert cell " << cell->getName() << " gain = " << gain << " done" << endl;
 }
 
 void Partitioner::removeNode(Node* curNode, int part) {

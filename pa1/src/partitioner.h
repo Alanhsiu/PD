@@ -32,6 +32,9 @@ class Partitioner {
     void parseInput(fstream& inFile);
     void partition();
 
+    void loop();
+    void reset();
+    void randomPart();
     void initPart();
     void initGain();
     void initBList();
@@ -59,6 +62,8 @@ class Partitioner {
     int _maxCellNum;                // Cmax for building bucket list
     int _minCellNum;                // Cmin for building bucket list
     int _maxPinNum;                 // Pmax for building bucket list
+    int _loopNum;                   // number of loops
+    int _randomPartNum;             // number of random partitions
     int _movePart;                  // the from side of the cell to be moved
     int _earlyStopFlag;             // flag for early stop
     int _earlyStopCount;            // count the number of early stop
@@ -66,6 +71,7 @@ class Partitioner {
     Node* _maxGainNode;             // pointer to the node with max gain
     vector<Net*> _netArray;         // net array of the circuit
     vector<Cell*> _cellArray;       // cell array of the circuit
+    vector<Cell*> _randomCellArray; // cell array of the circuit
     map<int, Node*> _bList[2];      // bucket list of partition A(0) and B(1)
     map<string, int> _netName2Id;   // mapping from net name to id
     map<string, int> _cellName2Id;  // mapping from cell name to id
