@@ -1,0 +1,11 @@
+NumNets: 3
+NetDegree: 3 
+A
+C
+D 
+NetDegree: 2
+B
+D
+NetDegree: 2
+A
+GND

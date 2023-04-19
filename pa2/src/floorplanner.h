@@ -19,12 +19,19 @@ class Floorplanner {
 
     void parseInput_blk(fstream& input_blk);
     void parseInput_net(fstream& input_net);
+
     void initialPlacement();
-    void computeXCoordinate(Node* root);
-    void computeYCoordinate(Node* root);
+    void insertNode(Node* node);
+    void computeCoordinate(Node* node);
+    void computeWireLength();
+    void computeCost();
+    bool checkValid();
     void updateYContour(int startX, int endX, int height);
     void floorplan(double alpha);
 
+    void printTree(Node* root, int level) const;
+    void printCoordinate() const;
+    void printYContour() const;
     void printSummary() const;
     void writeResult(fstream& outfile);
 
@@ -34,6 +41,7 @@ class Floorplanner {
     int                     _blkNum;
     int                     _tmlNum;
     int                     _netNum;
+    double                  _alpha;
     Node*                   _root;
     vector<int>             _yContour;
     vector<Net*>            _netArray;
@@ -45,7 +53,6 @@ class Floorplanner {
 
     int                     _finalCost;
     int                     _wireLength;
-    int                     _chipArea;
     int                     _chipWidth;
     int                     _chipHeight;
 
