@@ -32,7 +32,7 @@ class Node {
    public:
     // Constructor and destructor
     Node(const int& id)
-        : _id(id), _parent(NULL), _rchild(NULL), _lchild(NULL) {}
+        : _id(id), _parent(NULL), _rchild(NULL), _lchild(NULL), _x(0), _y(0) {}
     ~Node() {}
 
     // Basic access methods
@@ -65,25 +65,28 @@ class Block : public Terminal  // inherit from Terminal
    public:
     // constructor and destructor
     Block(string& name, int w, int h)
-        : Terminal(name, 0, 0), _w(w), _h(h), _node(NULL) {}
+        : Terminal(name, 0, 0), _w(w), _h(h), _rotate(false), _node(NULL) {}
     ~Block() {}
 
     // basic access methods
-    const int getWidth(bool rotate = false) { return rotate ? _h : _w; }
-    const int getHeight(bool rotate = false) { return rotate ? _w : _h; }
+    const int getWidth() { return _rotate ? _h : _w; }
+    const int getHeight() { return _rotate ? _w : _h; }
     const int getArea() const { return _h * _w; }
     const int getX() const override { return _node->getX() + _w / 2; }
     const int getY() const override { return _node->getY() + _h / 2; }
+    const bool getRotate() const { return _rotate; }
     Node* getNode() { return _node; }
 
     // set functions
     void setWidth(int w) { _w = w; }
     void setHeight(int h) { _h = h; }
     void setNode(Node* node) { _node = node; }
+    void rotate() { _rotate = !_rotate; }
 
    private:
     int _w;       // width of the block
     int _h;       // height of the block
+    bool _rotate; // whether the block is rotated
     Node* _node;  // pointer to the node in the tree
 };
 
@@ -107,8 +110,8 @@ class Net {
     void calcHPWL();
 
    private:
-    int _degree;                  // degree of the net
-    int _HPWL;                    // half-perimeter wire length
+    int     _degree;                  // degree of the net
+    double  _HPWL;                    // half-perimeter wire length
     vector<Terminal*> _termList;  // list of terminals the net is connected to
 };
 
