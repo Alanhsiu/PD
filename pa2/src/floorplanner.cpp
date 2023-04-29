@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
+#include <math.h>
 
 void Floorplanner::parseInput_blk(fstream& inFile) {
     string str;
@@ -78,17 +79,20 @@ void Floorplanner::initialPlacement() {
     for (int i = 0; i < _blkNum; ++i) {
         _nodeArray.push_back(new Node(i));
         _blkArray[i]->setNode(_nodeArray[i]);
+        _yContourWidth += _blkArray[i]->getWidth();
     }
+    // To get the block by a node, use _blkArray[node->getId()].
+    // To get the node by a block, use _blkArray[i]->getNode().
+
     // init B*-tree
-    _root = _nodeArray[0];
+    Node* dummyNode = new Node(-1);
+    dummyNode->setLChild(_blkArray[0]->getNode());
+    _blkArray[0]->getNode()->setParent(dummyNode);
+    _root = dummyNode;
     buildBStarTree(0);
 
     // init _yContour
-    _yContour.resize(_outlineWidth);
-    int width = _blkArray[_root->getId()]->getWidth();
-    int height = _blkArray[_root->getId()]->getHeight();
-    for (int i = 0; i < width; ++i)
-        _yContour[i] = height;
+    _yContour.resize(_yContourWidth);
 
     return;
 }
@@ -96,43 +100,38 @@ void Floorplanner::initialPlacement() {
 void Floorplanner::buildBStarTree(int start_idx) {
     for (int i = start_idx; i < _blkNum; ++i) {
         // set parent node
-        _nodeArray[i]->setParent(_nodeArray[(i - 1) / 2]);
+        if (i != 0)
+            _nodeArray[i]->setParent(_nodeArray[(i - 1) / 2]);
         // set child node
         if (i % 2 == 1)
             _nodeArray[(i - 1) / 2]->setLChild(_nodeArray[i]);
         else
             _nodeArray[(i - 1) / 2]->setRChild(_nodeArray[i]);
     }
-    printTree(_root, 0);
+    printTree(_root->getLChild(), 0);
     return;
 }
 
-void Floorplanner::deleteAndInsertNode(Node* node1, Node* node2) {  // op2
-}
-
-void Floorplanner::swapNode(Node* node1, Node* node2) {  // op3
-}
-
-void Floorplanner::computeCoordinate(Node* node, int& maxWidth, int& maxHeight) {
+void Floorplanner::computeCoordinate(Node* node) {
     if (Node* lChild = node->getLChild()) {
         int width = _blkArray[lChild->getId()]->getWidth();
         int height = _blkArray[lChild->getId()]->getHeight();
 
         // set X coordinate, which is the parent node's X + parent node's width
-        int startX = node->getX() + _blkArray[node->getId()]->getWidth();
+        int startX = node->getId() == -1 ? 0 : (node->getX() + _blkArray[node->getId()]->getWidth());
         lChild->setX(startX);
-        maxWidth = std::max(maxWidth, startX + width);
+        _chipWidth = std::max(_chipWidth, startX + width);
 
         // set Y coordinate and update _yContour
-        auto start_it = _yContour.begin() + startX;
-        auto end_it = start_it + width;
-        auto it = std::max_element(start_it, end_it);
-        int localMax = *it;
+        int localMax = 0;
+        for (int i = startX; i < startX + width; ++i)
+            localMax = std::max(localMax, _yContour[i]);
+        for (int i = startX; i < startX + width; ++i)
+            _yContour[i] = localMax + height;
         lChild->setY(localMax);
-        std::fill(start_it, end_it, localMax + height);
-        maxHeight = std::max(maxHeight, localMax + height);
+        _chipHeight = std::max(_chipHeight, localMax + height);
 
-        computeCoordinate(lChild, maxWidth, maxHeight);
+        computeCoordinate(lChild);
     }
     if (Node* rChild = node->getRChild()) {
         int width = _blkArray[rChild->getId()]->getWidth();
@@ -141,18 +140,18 @@ void Floorplanner::computeCoordinate(Node* node, int& maxWidth, int& maxHeight) 
         // set X coordinate, which is the same as parent node
         int startX = node->getX();
         rChild->setX(startX);
-        maxWidth = std::max(maxWidth, startX + width);
+        _chipWidth = std::max(_chipWidth, startX + width);
 
         // set Y coordinate and update _yContour
-        auto start_it = _yContour.begin() + startX;
-        auto end_it = start_it + width;
-        auto it = std::max_element(start_it, end_it);
-        int y = std::max(*it, node->getY());
-        std::fill(start_it, end_it, y + height);
-        rChild->setY(y);
-        maxHeight = std::max(maxHeight, y + height);
+        int localMax = 0;
+        for (int i = startX; i < startX + width; ++i)
+            localMax = std::max(localMax, _yContour[i]);
+        for (int i = startX; i < startX + width; ++i)
+            _yContour[i] = localMax + height;
+        rChild->setY(localMax);
+        _chipHeight = std::max(_chipHeight, localMax + height);
 
-        computeCoordinate(rChild, maxWidth, maxHeight);
+        computeCoordinate(rChild);
     }
 }
 
@@ -162,16 +161,27 @@ void Floorplanner::computeWireLength() {
         _netArray[i]->calcHPWL();
         _wireLength += _netArray[i]->getHPWL();
         // cout << "Net " << i << " : ";
-        // for (int j = 0; j < _netArray[i]->getDegree(); ++j) {
+        // for (int j = 0; j < _netArray[i]->getDegree(); ++j)
         //     cout << _netArray[i]->getTerm(j)->getName() << ":" << _netArray[i]->getTerm(j)->getX() << "," << _netArray[i]->getTerm(j)->getY() << " ";
-        // }
         // cout << endl;
         // cout << "HPWL = " << _netArray[i]->getHPWL() << endl;
     }
 }
 
-void Floorplanner::computeCost() {
-    _finalCost = _alpha * _chipHeight * _chipWidth + (1 - _alpha) * _wireLength;
+double Floorplanner::computeCost() {
+    // cout << "Wire length = " << _wireLength << endl;
+    // cout << "Chip width = " << _chipWidth << endl;
+    // cout << "Chip height = " << _chipHeight << endl;
+    return _alpha * _chipHeight * _chipWidth + (1 - _alpha) * _wireLength;
+}
+
+double Floorplanner::reCompute() {
+    clearYContour();
+    _chipWidth = 0;
+    _chipHeight = 0;
+    computeCoordinate(_root);
+    computeWireLength();
+    return computeCost();
 }
 
 bool Floorplanner::checkValid() {
@@ -184,42 +194,144 @@ bool Floorplanner::checkValid() {
     return true;
 }
 
-void Floorplanner::updateYContour(int startX, int endX, int height) {
-    // TODO
+void Floorplanner::swapNodes(Node* node1, Node* node2) {
+    Node* parent1 = node1->getParent();
+    Node* parent2 = node2->getParent();
+    int side1 = 0;
+    int side2 = 0;
+    parent1->getLChild() == node1 ? side1 = 0 : side1 = 1;
+    parent2->getLChild() == node2 ? side2 = 0 : side2 = 1;
+    side1 == 0 ? parent1->setLChild(node2) : parent1->setRChild(node2);
+    side2 == 0 ? parent2->setLChild(node1) : parent2->setRChild(node1);
+    node1->setParent(parent2);
+    node2->setParent(parent1);
+
+    Node* lchild1 = node1->getLChild();
+    Node* rchild1 = node1->getRChild();
+    Node* lchild2 = node2->getLChild();
+    Node* rchild2 = node2->getRChild();
+    node1->setLChild(lchild2);
+    node1->setRChild(rchild2);
+    node2->setLChild(lchild1);
+    node2->setRChild(rchild1);
+    if (lchild1 != NULL)
+        lchild1->setParent(node2);
+    if (rchild1 != NULL)
+        rchild1->setParent(node2);
+    if (lchild2 != NULL)
+        lchild2->setParent(node1);
+    if (rchild2 != NULL)
+        rchild2->setParent(node1);
 }
 
 void Floorplanner::simulatedAnnealing() {
-    // TODO
-    bool isValid = checkValid();
-    // int op = rand() % 3;
-    int op = 0;
-    switch (op) {
-        case 0:
-            // rotate a macro
-            int id = rand() % _blkNum;
-            _blkArray[id]->rotate();
-            cout << "rotate " << _blkArray[id]->getName() << endl;
-            int maxWidth = 0, maxHeight = 0;
-            clearYContour();
-            computeCoordinate(_root, maxWidth, maxHeight);
-            if(maxWidth <= _chipWidth && maxHeight <= _chipHeight) {
-                _chipWidth = maxWidth;
-                _chipHeight = maxHeight;
-            }
-            else {
+    // bool isValid = checkValid();
+    double Temp = 1000;
+    double ratio = 0.9;
+    while (Temp > 1) {
+        int op = rand() % 3;
+        switch (op) {
+            case 0: {  // rotate a macro
+                cout << "case 0" << endl;
+                int id = rand() % _blkNum;
                 _blkArray[id]->rotate();
-                clearYContour();
-                computeCoordinate(_root, _chipWidth, _chipHeight);
+                double cost = reCompute();
+                if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
+                    _finalCost = cost;
+                    cout << "rotate " << _blkArray[id]->getName() << ", cost = " << cost << endl;
+                    break;
+                }
+
+                // recover
+                _blkArray[id]->rotate();
+                reCompute();
+                break;
             }
-            computeWireLength();
-            computeCost();
-            break;
-        // case 1:
-        //     // delete and insert
-        //     break;
-        // case 2:
-        //     // swap two nodes
-        //     break;
+            case 1: {                        // delete and insert a macro
+                cout << "case 1" << endl;    
+                vector<int> leafOrUniaryId;  // tree nodes with no child or only one child
+                vector<int> leafId;
+                for (int i = 0; i < _blkNum; ++i)
+                    if (_nodeArray[i]->getLChild() == NULL && _nodeArray[i]->getRChild() == NULL)
+                        leafId.push_back(i);
+                Node* node = _nodeArray[leafId[rand() % leafId.size()]];
+                Node* parent = node->getParent();
+
+                // delete node
+                int side = 0;
+                if (parent->getLChild() == node)
+                    parent->setLChild(NULL);
+                else {
+                    parent->setRChild(NULL);
+                    side = 1;
+                }
+                node->setParent(NULL);
+                // insert node
+                for (int i = 0; i < _blkNum; ++i)
+                    if ((_blkArray[i]->getNode()->getLChild() == NULL ||_blkArray[i]->getNode()->getRChild() == NULL) && i!=node->getId())
+                        leafOrUniaryId.push_back(i);
+                    
+                Node* targetNode = _nodeArray[leafOrUniaryId[rand() % leafOrUniaryId.size()]];
+                int leftOrRight = rand() % 2;
+                node->setParent(targetNode);
+                if (leftOrRight == 0 && targetNode->getLChild() == NULL)
+                    targetNode->setLChild(node);
+                else
+                    targetNode->setRChild(node);
+
+                // recompute
+                double cost = reCompute();
+                if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
+                    _finalCost = cost;
+                    break;
+                }
+
+                // recover
+                if (leftOrRight == 0 && targetNode->getLChild() == node)
+                    targetNode->setLChild(NULL);
+                else
+                    targetNode->setRChild(NULL);
+                node->setParent(NULL);
+                if (side == 0)
+                    parent->setLChild(node);
+                else
+                    parent->setRChild(node);
+                node->setParent(parent);
+                reCompute();
+                break;
+            }
+            case 2: {  // swap two nodes
+                break;
+                int id1 = rand() % _blkNum;
+                int id2 = rand() % _blkNum;
+                if (id1 == id2)
+                    break;
+                cout << "swap(before) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << endl;
+                Node* node1 = _nodeArray[id1];
+                Node* node2 = _nodeArray[id2];
+                Node* parent1 = node1->getParent();
+                Node* parent2 = node2->getParent();
+                if (parent1 == node2 || parent2 == node1)
+                    break;
+                swapNodes(node1, node2);
+
+                // recompute
+                double cost = reCompute();
+                cout << "cost = " << cost << endl;
+                if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
+                    _finalCost = cost;
+                    cout << "swap(after) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << ", and the cost is " << cost << endl;
+                    printTree(_root->getLChild(), 0);
+                    break;
+                }
+                // recover
+                swapNodes(node2, node1);
+                cout << "swap(restore) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << endl;
+                reCompute();
+                break;
+            }
+        }
+        Temp *= ratio;
     }
     // int id = rand() % _blkNum;
     // cout << "rotate " << _blkArray[id]->getName() << endl;
@@ -232,14 +344,15 @@ void Floorplanner::simulatedAnnealing() {
 void Floorplanner::floorplan(double alpha) {
     _alpha = alpha;
     initialPlacement();
-
-    computeCoordinate(_root, _chipWidth, _chipHeight);
+    _chipWidth = 0;
+    _chipHeight = 0;
+    computeCoordinate(_root->getLChild());
     computeWireLength();
-    computeCost();
+    _finalCost = computeCost();
 
     simulatedAnnealing();
 
-    printTree(_root, 0);
+    printTree(_root->getLChild(), 0);
     printSummary();
     printCoordinate();
 }
@@ -279,6 +392,8 @@ void Floorplanner::printYContour() const {
         }
         ++i;
     }
+    cout << _yContour.size() << ':' << _yContour[_yContour.size() - 1] << endl;
+    cout << "===================================================" << endl;
 }
 
 void Floorplanner::printSummary() const {
@@ -304,14 +419,11 @@ void Floorplanner::writeResult(fstream& outFile) {
 
 void Floorplanner::clearYContour() {
     _yContour.clear();
-    
+
     // init _yContour
-    _yContour.resize(_outlineWidth);
-    int width = _blkArray[_root->getId()]->getWidth();
-    int height = _blkArray[_root->getId()]->getHeight();
-    for (int i = 0; i < width; ++i)
-        _yContour[i] = height;
+    _yContour.resize(_yContourWidth);
 }
+
 void Floorplanner::clearBStarTree(Node* node) {
     if (node == NULL)
         return;
@@ -329,5 +441,7 @@ void Floorplanner::clear() {
         delete _tmlArray[i];
     for (int i = 0; i < _netNum; ++i)
         delete _netArray[i];
+    clearYContour();
+    clearBStarTree(_root->getLChild());
     return;
 }

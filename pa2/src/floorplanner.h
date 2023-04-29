@@ -22,13 +22,12 @@ class Floorplanner {
 
     void initialPlacement();
     void buildBStarTree(int start_idx);
-    void deleteAndInsertNode(Node* node1, Node* node2);
-    void swapNode(Node* node1, Node* node2);
-    void computeCoordinate(Node* node, int& maxWidth, int& maxHeight);
+    void computeCoordinate(Node* node);
     void computeWireLength();
-    void computeCost();
+    double computeCost();
+    double reCompute();
     bool checkValid();
-    void updateYContour(int startX, int endX, int height);
+    void swapNodes(Node* node1, Node* node2);
     void simulatedAnnealing();
     void floorplan(double alpha);
     void clearYContour();
@@ -43,23 +42,24 @@ class Floorplanner {
    private:
     int _outlineWidth;
     int _outlineHeight;
+    int _yContourWidth;
     int _blkNum;
     int _tmlNum;
     int _netNum;
     double _alpha;
     Node* _root;  // B*-tree root
-    vector<int>             _yContour;
-    vector<Net*>            _netArray;
-    vector<Node*>           _nodeArray;
-    vector<Block*>          _blkArray;
-    vector<Terminal*>       _tmlArray;
-    map<string, Block*>     _blkMap;
-    map<string, Terminal*>  _tmlMap;
+    vector<int> _yContour;
+    vector<Net*> _netArray;
+    vector<Node*> _nodeArray;
+    vector<Block*> _blkArray;
+    vector<Terminal*> _tmlArray;
+    map<string, Block*> _blkMap;
+    map<string, Terminal*> _tmlMap;
 
-    int     _finalCost;
-    float   _wireLength;
-    int     _chipWidth;
-    int     _chipHeight;
+    int _finalCost;
+    float _wireLength;
+    int _chipWidth;
+    int _chipHeight;
 
     void clear();
 };

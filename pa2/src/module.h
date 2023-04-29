@@ -110,9 +110,9 @@ class Net {
     void calcHPWL();
 
    private:
-    int     _degree;                  // degree of the net
-    double  _HPWL;                    // half-perimeter wire length
-    vector<Terminal*> _termList;  // list of terminals the net is connected to
+    int     _degree;                    // degree of the net
+    double  _HPWL;                      // half-perimeter wire length
+    vector<Terminal*> _termList;        // list of terminals the net is connected to
 };
 
 #endif  // MODULE_H
