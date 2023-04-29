@@ -1,10 +1,10 @@
 #include "floorplanner.h"
+#include <math.h>
 #include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <vector>
-#include <math.h>
 
 void Floorplanner::parseInput_blk(fstream& inFile) {
     string str;
@@ -232,7 +232,7 @@ void Floorplanner::simulatedAnnealing() {
         int op = rand() % 3;
         switch (op) {
             case 0: {  // rotate a macro
-                cout << "case 0" << endl;
+                cout << "case 0: original cost is " << _finalCost << endl;
                 int id = rand() % _blkNum;
                 _blkArray[id]->rotate();
                 double cost = reCompute();
@@ -247,8 +247,10 @@ void Floorplanner::simulatedAnnealing() {
                 reCompute();
                 break;
             }
-            case 1: {                        // delete and insert a macro
-                cout << "case 1" << endl;    
+            case 1: {  // delete and insert a macro
+                // break;
+                cout << "case 1: original cost is " << _finalCost << endl;
+                printTree(_root->getLChild(), 0);
                 vector<int> leafOrUniaryId;  // tree nodes with no child or only one child
                 vector<int> leafId;
                 for (int i = 0; i < _blkNum; ++i)
@@ -266,22 +268,33 @@ void Floorplanner::simulatedAnnealing() {
                     side = 1;
                 }
                 node->setParent(NULL);
+
                 // insert node
                 for (int i = 0; i < _blkNum; ++i)
-                    if ((_blkArray[i]->getNode()->getLChild() == NULL ||_blkArray[i]->getNode()->getRChild() == NULL) && i!=node->getId())
+                    if ((_nodeArray[i]->getLChild() == NULL || _nodeArray[i]->getRChild() == NULL) && i != node->getId())
                         leafOrUniaryId.push_back(i);
-                    
+
                 Node* targetNode = _nodeArray[leafOrUniaryId[rand() % leafOrUniaryId.size()]];
                 int leftOrRight = rand() % 2;
                 node->setParent(targetNode);
-                if (leftOrRight == 0 && targetNode->getLChild() == NULL)
+                if (targetNode->getLChild() == NULL && targetNode->getRChild() == NULL && leftOrRight == 0)
                     targetNode->setLChild(node);
-                else
+                else if(targetNode->getLChild() == NULL && targetNode->getRChild() == NULL && leftOrRight == 1)
                     targetNode->setRChild(node);
+                else if(targetNode->getLChild() == NULL){
+                    leftOrRight = 0;
+                    targetNode->setLChild(node);
+                }
+                else{
+                    leftOrRight = 1;
+                    targetNode->setRChild(node);
+                }
 
                 // recompute
                 double cost = reCompute();
                 if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
+                    printTree(_root->getLChild(), 0);
+                    cout << "delete " << _blkArray[node->getId()]->getName() << " and insert to " << _blkArray[targetNode->getId()]->getName() << ", cost = " << cost << endl;
                     _finalCost = cost;
                     break;
                 }
@@ -301,7 +314,8 @@ void Floorplanner::simulatedAnnealing() {
                 break;
             }
             case 2: {  // swap two nodes
-                break;
+                // break;
+                cout << "case 2: original cost is " << _finalCost << endl;
                 int id1 = rand() % _blkNum;
                 int id2 = rand() % _blkNum;
                 if (id1 == id2)
@@ -325,7 +339,7 @@ void Floorplanner::simulatedAnnealing() {
                     break;
                 }
                 // recover
-                swapNodes(node2, node1);
+                swapNodes(node1, node2);
                 cout << "swap(restore) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << endl;
                 reCompute();
                 break;
