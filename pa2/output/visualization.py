@@ -3,7 +3,7 @@ import matplotlib.ticker as ticker
 
 data= []
 # Read the data from the input file
-with open('output.rpt', 'r') as f:
+with open('ami33.rpt', 'r') as f:
     for _ in range(5):
         next(f)
     data = [line.strip().split() for line in f]

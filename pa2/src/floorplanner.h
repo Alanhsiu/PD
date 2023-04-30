@@ -26,7 +26,6 @@ class Floorplanner {
     void computeWireLength();
     double computeCost();
     double reCompute();
-    bool checkValid();
     void DFS(Node* node, vector<Node*>& nodeArray);
     void swapNodes(Node* node1, Node* node2);
     void simulatedAnnealing();
