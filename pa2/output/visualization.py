@@ -30,7 +30,6 @@ for i in range(len(data)):
     ax.annotate(rect_names[i], xy=(x1_vals[i], y1_vals[i]), xytext=(5, 5), textcoords='offset points', color='blue', fontsize=10, fontweight='bold')
     ax.annotate('({},{})'.format(x, y), xy=(x, y), xytext=(5, 5), textcoords='offset points', color='red', fontsize=10, fontweight='bold')
     ax.scatter(x, y, color='red', s=10)
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(10))
 
 
 # Set the axis limits

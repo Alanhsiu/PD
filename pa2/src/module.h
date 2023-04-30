@@ -42,6 +42,8 @@ class Node {
     Node* getLChild() const { return _lchild; }
     const int getX() const { return _x; }
     const int getY() const { return _y; }
+    const int getArea() const { return _area; }
+    const bool getSide() const { return _side; }
 
     // Set functions
     void setId(const int id) { _id = id; }
@@ -50,6 +52,8 @@ class Node {
     void setLChild(Node* lchild) { _lchild = lchild; }
     void setX(const int x) { _x = x; }
     void setY(const int y) { _y = y; }
+    void setArea(const int area) { _area = area; }
+    void setSide(const bool side) { _side = side; }
 
    private:
     int _id;
@@ -58,6 +62,8 @@ class Node {
     Node* _lchild;  // pointer to the left child
     int _x;         // x coordinate of the node
     int _y;         // y coordinate of the node
+    int _area;      // area of the node
+    bool _side;     // 0: left, 1: right
 };
 
 class Block : public Terminal  // inherit from Terminal

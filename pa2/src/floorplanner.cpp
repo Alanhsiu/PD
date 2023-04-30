@@ -43,9 +43,6 @@ void Floorplanner::parseInput_blk(fstream& inFile) {
         _tmlArray.push_back(terminal);
         _tmlMap[name] = terminal;
     }
-    // sort(_blkArray.begin(), _blkArray.end(), [](Block* a, Block* b) {
-    //     return a->getArea() > b->getArea();
-    // });
     return;
 }
 
@@ -79,17 +76,21 @@ void Floorplanner::initialPlacement() {
     for (int i = 0; i < _blkNum; ++i) {
         _nodeArray.push_back(new Node(i));
         _blkArray[i]->setNode(_nodeArray[i]);
-        _yContourWidth += _blkArray[i]->getWidth();
+        _nodeArray[i]->setArea(_blkArray[i]->getArea());
+        _yContourWidth += std::max(_blkArray[i]->getWidth(), _blkArray[i]->getHeight());
     }
-    // To get the block by a node, use _blkArray[node->getId()].
-    // To get the node by a block, use _blkArray[i]->getNode().
+    sort(_nodeArray.begin(), _nodeArray.end(), [](Node* a, Node* b) {
+        return a->getArea() > b->getArea();
+    });
 
     // init B*-tree
     Node* dummyNode = new Node(-1);
-    dummyNode->setLChild(_blkArray[0]->getNode());
-    _blkArray[0]->getNode()->setParent(dummyNode);
+    dummyNode->setLChild(_nodeArray[0]);
+    _nodeArray[0]->setParent(dummyNode);
+    _nodeArray[0]->setSide(0);
+
     _root = dummyNode;
-    buildBStarTree(0);
+    buildBStarTree(1);
 
     // init _yContour
     _yContour.resize(_yContourWidth);
@@ -103,17 +104,22 @@ void Floorplanner::buildBStarTree(int start_idx) {
         if (i != 0)
             _nodeArray[i]->setParent(_nodeArray[(i - 1) / 2]);
         // set child node
-        if (i % 2 == 1)
+        if (i % 2 == 1) {
             _nodeArray[(i - 1) / 2]->setLChild(_nodeArray[i]);
-        else
+            _nodeArray[i]->setSide(0);
+        } else {
             _nodeArray[(i - 1) / 2]->setRChild(_nodeArray[i]);
+            _nodeArray[i]->setSide(1);
+        }
     }
-    printTree(_root->getLChild(), 0);
+    printTree(_root, -1);
     return;
 }
 
 void Floorplanner::computeCoordinate(Node* node) {
     if (Node* lChild = node->getLChild()) {
+        // cout << "lChild: " << lChild->getId() << ", and its parent: " << lChild->getParent()->getId() << endl;
+        // cout << "lChild: " << _blkArray[lChild->getId()]->getName() << ", and its parent: " << _blkArray[lChild->getParent()->getId()]->getName() << endl;
         int width = _blkArray[lChild->getId()]->getWidth();
         int height = _blkArray[lChild->getId()]->getHeight();
 
@@ -131,9 +137,13 @@ void Floorplanner::computeCoordinate(Node* node) {
         lChild->setY(localMax);
         _chipHeight = std::max(_chipHeight, localMax + height);
 
+        // printYContour();
+
         computeCoordinate(lChild);
     }
     if (Node* rChild = node->getRChild()) {
+        // cout << "rChild: " << rChild->getId() << ", and its parent: " << rChild->getParent()->getId() << endl;
+        // cout << "rChild: " << _blkArray[rChild->getId()]->getName() << ", and its parent: " << _blkArray[rChild->getParent()->getId()]->getName() << endl;
         int width = _blkArray[rChild->getId()]->getWidth();
         int height = _blkArray[rChild->getId()]->getHeight();
 
@@ -150,6 +160,8 @@ void Floorplanner::computeCoordinate(Node* node) {
             _yContour[i] = localMax + height;
         rChild->setY(localMax);
         _chipHeight = std::max(_chipHeight, localMax + height);
+
+        // printYContour();
 
         computeCoordinate(rChild);
     }
@@ -172,7 +184,13 @@ double Floorplanner::computeCost() {
     // cout << "Wire length = " << _wireLength << endl;
     // cout << "Chip width = " << _chipWidth << endl;
     // cout << "Chip height = " << _chipHeight << endl;
-    return _alpha * _chipHeight * _chipWidth + (1 - _alpha) * _wireLength;
+    int penalty = 0;
+    if (_chipWidth > _outlineWidth)
+        penalty += _chipWidth - _outlineWidth;
+    if (_chipHeight > _outlineHeight)
+        penalty += _chipHeight - _outlineHeight;
+    return _alpha * _chipHeight * _chipWidth + (1 - _alpha) * _wireLength + 10000 * penalty;
+    // return penalty;
 }
 
 double Floorplanner::reCompute() {
@@ -194,18 +212,43 @@ bool Floorplanner::checkValid() {
     return true;
 }
 
+void Floorplanner::DFS(Node* node, vector<Node*>& nodeArray) {
+    if (node == NULL)
+        return;
+    DFS(node->getLChild(), nodeArray);
+    DFS(node->getRChild(), nodeArray);
+    if (node->getLChild() == NULL || node->getRChild() == NULL)
+        nodeArray.push_back(node);
+}
+
 void Floorplanner::swapNodes(Node* node1, Node* node2) {
+    // exchange parent
     Node* parent1 = node1->getParent();
     Node* parent2 = node2->getParent();
-    int side1 = 0;
-    int side2 = 0;
-    parent1->getLChild() == node1 ? side1 = 0 : side1 = 1;
-    parent2->getLChild() == node2 ? side2 = 0 : side2 = 1;
-    side1 == 0 ? parent1->setLChild(node2) : parent1->setRChild(node2);
-    side2 == 0 ? parent2->setLChild(node1) : parent2->setRChild(node1);
+    int side1 = node1->getSide();
+    int side2 = node2->getSide();
+    // parent1->getLChild() == node1 ? side1 = 0 : side1 = 1;
+    // parent2->getLChild() == node2 ? side2 = 0 : side2 = 1;
+    // side1 == 0 ? parent1->setLChild(node2) : parent1->setRChild(node2);
+    // side2 == 0 ? parent2->setLChild(node1) : parent2->setRChild(node1);
+    if (side1 == 0) {
+        parent1->setLChild(node2);
+        node2->setSide(0);
+    } else {
+        parent1->setRChild(node2);
+        node2->setSide(1);
+    }
+    if (side2 == 0) {
+        parent2->setLChild(node1);
+        node1->setSide(0);
+    } else {
+        parent2->setRChild(node1);
+        node1->setSide(1);
+    }
     node1->setParent(parent2);
     node2->setParent(parent1);
 
+    // exchange children
     Node* lchild1 = node1->getLChild();
     Node* rchild1 = node1->getRChild();
     Node* lchild2 = node2->getLChild();
@@ -225,134 +268,239 @@ void Floorplanner::swapNodes(Node* node1, Node* node2) {
 }
 
 void Floorplanner::simulatedAnnealing() {
-    // bool isValid = checkValid();
-    double Temp = 1000;
+    double Temp = 10000;
     double ratio = 0.9;
     while (Temp > 1) {
-        int op = rand() % 3;
-        switch (op) {
-            case 0: {  // rotate a macro
-                cout << "case 0: original cost is " << _finalCost << endl;
-                int id = rand() % _blkNum;
-                _blkArray[id]->rotate();
-                double cost = reCompute();
-                if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
-                    _finalCost = cost;
-                    cout << "rotate " << _blkArray[id]->getName() << ", cost = " << cost << endl;
+        int iter = 500;
+        if (Temp > 100)
+            iter = 500;
+        else if (Temp > 30)
+            iter = 1000;
+        else
+            iter = 500;
+        for (int i = 0; i < 10; ++i) {
+            int op = rand() % 5;
+            switch (op) {
+                case 0: {  // rotate a macro
+                    break;
+                    cout << "case 0: original cost is " << _finalCost << endl;
+                    int id = rand() % _blkNum;
+                    _blkArray[id]->rotate();
+                    double cost = reCompute();
+                    if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
+                        _finalCost = cost;
+                        cout << "rotate " << _blkArray[id]->getName() << ", cost = " << cost << endl;
+                        break;
+                    }
+
+                    // recover
+                    _blkArray[id]->rotate();
+                    reCompute();
                     break;
                 }
+                case 1: {  // delete and insert a macro
+                    break;
+                    cout << "case 1: original cost is " << _finalCost << endl;
+                    printTree(_root, -1);
+                    vector<int> leafOrUniaryId;  // tree nodes with no child or only one child
+                    vector<int> leafId;
+                    for (int i = 0; i < _blkNum; ++i)
+                        if (_nodeArray[i]->getLChild() == NULL && _nodeArray[i]->getRChild() == NULL)
+                            leafId.push_back(i);
+                    Node* node = _nodeArray[leafId[rand() % leafId.size()]];
+                    Node* parent = node->getParent();
 
-                // recover
-                _blkArray[id]->rotate();
-                reCompute();
-                break;
-            }
-            case 1: {  // delete and insert a macro
-                // break;
-                cout << "case 1: original cost is " << _finalCost << endl;
-                printTree(_root->getLChild(), 0);
-                vector<int> leafOrUniaryId;  // tree nodes with no child or only one child
-                vector<int> leafId;
-                for (int i = 0; i < _blkNum; ++i)
-                    if (_nodeArray[i]->getLChild() == NULL && _nodeArray[i]->getRChild() == NULL)
-                        leafId.push_back(i);
-                Node* node = _nodeArray[leafId[rand() % leafId.size()]];
-                Node* parent = node->getParent();
+                    // delete node
+                    int side = 0;
+                    if (parent->getLChild() == node)
+                        parent->setLChild(NULL);
+                    else {
+                        parent->setRChild(NULL);
+                        side = 1;
+                    }
+                    node->setParent(NULL);
 
-                // delete node
-                int side = 0;
-                if (parent->getLChild() == node)
-                    parent->setLChild(NULL);
-                else {
-                    parent->setRChild(NULL);
-                    side = 1;
-                }
-                node->setParent(NULL);
+                    // insert node
+                    for (int i = 0; i < _blkNum; ++i)
+                        if ((_nodeArray[i]->getLChild() == NULL || _nodeArray[i]->getRChild() == NULL) && _nodeArray[i] != node)
+                            leafOrUniaryId.push_back(i);
 
-                // insert node
-                for (int i = 0; i < _blkNum; ++i)
-                    if ((_nodeArray[i]->getLChild() == NULL || _nodeArray[i]->getRChild() == NULL) && i != node->getId())
-                        leafOrUniaryId.push_back(i);
+                    Node* targetNode = _nodeArray[leafOrUniaryId[rand() % leafOrUniaryId.size()]];
+                    int leftOrRight = rand() % 2;
+                    node->setParent(targetNode);
+                    if (targetNode->getLChild() == NULL && targetNode->getRChild() == NULL && leftOrRight == 0)
+                        targetNode->setLChild(node);
+                    else if (targetNode->getLChild() == NULL && targetNode->getRChild() == NULL && leftOrRight == 1)
+                        targetNode->setRChild(node);
+                    else if (targetNode->getLChild() == NULL) {
+                        leftOrRight = 0;
+                        targetNode->setLChild(node);
+                    } else {
+                        leftOrRight = 1;
+                        targetNode->setRChild(node);
+                    }
 
-                Node* targetNode = _nodeArray[leafOrUniaryId[rand() % leafOrUniaryId.size()]];
-                int leftOrRight = rand() % 2;
-                node->setParent(targetNode);
-                if (targetNode->getLChild() == NULL && targetNode->getRChild() == NULL && leftOrRight == 0)
-                    targetNode->setLChild(node);
-                else if(targetNode->getLChild() == NULL && targetNode->getRChild() == NULL && leftOrRight == 1)
-                    targetNode->setRChild(node);
-                else if(targetNode->getLChild() == NULL){
-                    leftOrRight = 0;
-                    targetNode->setLChild(node);
-                }
-                else{
-                    leftOrRight = 1;
-                    targetNode->setRChild(node);
-                }
+                    // recompute
+                    double cost = reCompute();
+                    if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
+                        // printTree(_root->getLChild(), 0);
+                        cout << "delete " << _blkArray[node->getId()]->getName() << " and insert to " << _blkArray[targetNode->getId()]->getName() << ", cost = " << cost << endl;
+                        _finalCost = cost;
+                        break;
+                    }
 
-                // recompute
-                double cost = reCompute();
-                if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
-                    printTree(_root->getLChild(), 0);
-                    cout << "delete " << _blkArray[node->getId()]->getName() << " and insert to " << _blkArray[targetNode->getId()]->getName() << ", cost = " << cost << endl;
-                    _finalCost = cost;
+                    // recover
+                    if (leftOrRight == 0 && targetNode->getLChild() == node)
+                        targetNode->setLChild(NULL);
+                    else
+                        targetNode->setRChild(NULL);
+                    node->setParent(NULL);
+                    if (side == 0)
+                        parent->setLChild(node);
+                    else
+                        parent->setRChild(node);
+                    node->setParent(parent);
+                    reCompute();
                     break;
                 }
-
-                // recover
-                if (leftOrRight == 0 && targetNode->getLChild() == node)
-                    targetNode->setLChild(NULL);
-                else
-                    targetNode->setRChild(NULL);
-                node->setParent(NULL);
-                if (side == 0)
-                    parent->setLChild(node);
-                else
-                    parent->setRChild(node);
-                node->setParent(parent);
-                reCompute();
-                break;
-            }
-            case 2: {  // swap two nodes
-                // break;
-                cout << "case 2: original cost is " << _finalCost << endl;
-                int id1 = rand() % _blkNum;
-                int id2 = rand() % _blkNum;
-                if (id1 == id2)
+                case 2: {  // swap two nodes
                     break;
-                cout << "swap(before) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << endl;
-                Node* node1 = _nodeArray[id1];
-                Node* node2 = _nodeArray[id2];
-                Node* parent1 = node1->getParent();
-                Node* parent2 = node2->getParent();
-                if (parent1 == node2 || parent2 == node1)
-                    break;
-                swapNodes(node1, node2);
+                    cout << "case 2: original cost is " << _finalCost << endl;
+                    int id1 = rand() % _blkNum;
+                    int id2 = rand() % _blkNum;
+                    if (id1 == id2)
+                        break;
+                    cout << "swap(before) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << endl;
+                    Node* node1 = _nodeArray[id1];
+                    Node* node2 = _nodeArray[id2];
+                    Node* parent1 = node1->getParent();
+                    Node* parent2 = node2->getParent();
+                    // cout<< "parent1 = " << _blkArray[parent1->getId()]->getName() << endl;
+                    // cout<< "parent2 = " << _blkArray[parent2->getId()]->getName() << endl;
+                    cout << "node1 = " << node1->getId() << endl;
+                    cout << "node2 = " << node2->getId() << endl;
+                    cout << "parent1 = " << parent1->getId() << endl;
+                    cout << "parent2 = " << parent2->getId() << endl;
+                    if (parent1 == node2 || parent2 == node1 || parent1 == parent2)
+                        break;
+                    swapNodes(node1, node2);
 
-                // recompute
-                double cost = reCompute();
-                cout << "cost = " << cost << endl;
-                if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
-                    _finalCost = cost;
-                    cout << "swap(after) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << ", and the cost is " << cost << endl;
-                    printTree(_root->getLChild(), 0);
+                    // recompute
+                    double cost = reCompute();
+                    cout << "cost = " << cost << endl;
+                    if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
+                        _finalCost = cost;
+                        cout << "swap(after) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << ", and the cost is " << cost << endl;
+                        printTree(_root, -1);
+                        break;
+                    }
+                    // recover
+                    swapNodes(node1, node2);
+                    cout << "swap(restore) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << endl;
+                    printTree(_root, -1);
+                    reCompute();
                     break;
                 }
-                // recover
-                swapNodes(node1, node2);
-                cout << "swap(restore) " << _blkArray[id1]->getName() << " and " << _blkArray[id2]->getName() << endl;
-                reCompute();
-                break;
+                case 3: {  // swap sibling
+                    break;
+                    cout << "case 3: original cost is " << _finalCost << endl;
+                    int id = rand() % _blkNum;
+                    Node* node = _nodeArray[id];
+                    if (node->getLChild() == NULL || node->getRChild() == NULL)
+                        break;
+                    Node* lChild = node->getLChild();
+                    Node* rChild = node->getRChild();
+                    cout << "swap(before) " << _blkArray[lChild->getId()]->getName() << " and " << _blkArray[rChild->getId()]->getName() << endl;
+                    swapNodes(lChild, rChild);
+                    cout << "hi" << endl;
+
+                    // recompute
+                    double cost = reCompute();
+                    if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
+                        _finalCost = cost;
+                        cout << "swap(after) " << _blkArray[lChild->getId()]->getName() << " and " << _blkArray[rChild->getId()]->getName() << ", and the cost is " << cost << endl;
+                        break;
+                    }
+                    // recover
+                    swapNodes(lChild, rChild);
+                    reCompute();
+                    cout << "recover" << endl;
+
+                    break;
+                }
+                case 4: {  // delete and insert a macro in anyplace
+                    // break;
+                    printTree(_root, -1);
+                    cout << "case 4: original cost is " << _finalCost << endl;
+                    int id = rand() % _blkNum;
+                    Node* node = _nodeArray[id];
+                    Node* parent = node->getParent();
+                    if (parent == NULL || parent->getId() == -1)
+                        break;
+                    cout << "delete " << _blkArray[node->getId()]->getName() << endl;
+                    int side = _nodeArray[id]->getSide();
+                    cout << "side = " << side << endl;
+                    (side == 0) ? parent->setLChild(NULL) : parent->setRChild(NULL);
+                    node->setParent(NULL);
+
+                    vector<Node*> remain;
+                    DFS(_root->getLChild(), remain);
+                    int target = rand() % remain.size();
+                    Node* targetNode = remain[target];
+                    for(int i = 0; i < remain.size(); i++)
+                        cout << _blkArray[remain[i]->getId()]->getName() << " ";
+                    cout << endl;
+                    cout << "insert " << _blkArray[node->getId()]->getName() << " to " << _blkArray[targetNode->getId()]->getName() << endl;
+                    int leftOrRight = rand() % 2;
+                    node->setParent(targetNode);
+                    if (targetNode->getLChild() == NULL && targetNode->getRChild() == NULL && leftOrRight == 0) {
+                        targetNode->setLChild(node);
+                        node->setSide(0);
+                    } else if (targetNode->getLChild() == NULL && targetNode->getRChild() == NULL && leftOrRight == 1) {
+                        targetNode->setRChild(node);
+                        node->setSide(1);
+                    } else if (targetNode->getLChild() == NULL) {
+                        leftOrRight = 0;
+                        targetNode->setLChild(node);
+                        node->setSide(0);
+                    } else {
+                        leftOrRight = 1;
+                        targetNode->setRChild(node);
+                        node->setSide(1);
+                    }
+                    cout << "insert done" << endl;
+                    printTree(_root, -1);
+
+                    // recompute
+                    double cost = reCompute();
+                    cout << "cost = " << cost << endl;
+                    if (cost < _finalCost || exp((_finalCost - cost) / Temp) > (double)rand() / RAND_MAX) {
+                        _finalCost = cost;
+                        cout << "delete(after) " << _blkArray[node->getId()]->getName() << ", and the cost is " << cost << endl;
+                        break;
+                    }
+                    // recover
+                    if (leftOrRight == 0 && targetNode->getLChild() == node)
+                        targetNode->setLChild(NULL);
+                    else
+                        targetNode->setRChild(NULL);
+
+                    if (side == 0) {
+                        parent->setLChild(node);
+                        node->setSide(0);
+                    } else {
+                        parent->setRChild(node);
+                        node->setSide(1);
+                    }
+                    node->setParent(parent);
+                    reCompute();
+                    cout << "recover" << endl;
+                    break;
+                }
             }
         }
         Temp *= ratio;
     }
-    // int id = rand() % _blkNum;
-    // cout << "rotate " << _blkArray[id]->getName() << endl;
-    // _blkArray[id]->rotate();
-    // computeCoordinate(_root);
-    // computeWireLength();
-    // computeCost();
 }
 
 void Floorplanner::floorplan(double alpha) {
@@ -360,26 +508,35 @@ void Floorplanner::floorplan(double alpha) {
     initialPlacement();
     _chipWidth = 0;
     _chipHeight = 0;
-    computeCoordinate(_root->getLChild());
+    computeCoordinate(_root);
     computeWireLength();
     _finalCost = computeCost();
 
     simulatedAnnealing();
 
-    printTree(_root->getLChild(), 0);
+    printTree(_root, -1);
     printSummary();
     printCoordinate();
 }
 
 void Floorplanner::printTree(Node* node, int level) const {
-    if (level == 0)
+    if (level == -1) {
         cout << "==================== Tree ====================" << endl;
+        // cout << "parent: ";
+        // for (int i = 0; i < _blkNum; ++i)
+        //     cout << "node" << _nodeArray[i]->getId() << " 's parent is " << _nodeArray[i]->getParent()->getId() << ", ";
+        // cout << endl;
+        // for (int i = 0; i < _blkNum; ++i)
+        //     cout << _blkArray[i]->getName() << " 's parent is " << _blkArray[i]->getNode()->getParent()->getId() << ", ";
+        // cout << endl;
+    }
     if (node == NULL)
         return;
     printTree(node->getRChild(), level + 1);
     for (int i = 0; i < level; ++i)
         cout << "    ";
-    cout << _blkArray[node->getId()]->getName() << endl;
+    if (level != -1)
+        cout << _blkArray[node->getId()]->getName() << endl;
     printTree(node->getLChild(), level + 1);
 }
 
@@ -412,7 +569,7 @@ void Floorplanner::printYContour() const {
 
 void Floorplanner::printSummary() const {
     cout << "==================== Summary ====================" << endl;
-    cout << "Final Cost = " << _finalCost << endl;
+    cout << "Final Cost = " << _alpha * _chipHeight * _chipWidth + (1 - _alpha) * _wireLength << endl;
     cout << "Wire Length = " << _wireLength << endl;
     cout << "Chip Area = " << _chipWidth * _chipHeight << endl;
     cout << "Chip Width = " << _chipWidth << endl;
